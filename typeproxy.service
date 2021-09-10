@@ -1,0 +1,21 @@
+[Unit]
+Description=TypeProxy service
+After=network.target
+
+[Service]
+Type=simple
+LimitNOFILE=1024
+startLimitIntervalSec=60
+Restart=on-failure
+RestartSec=10
+ExecStart=/usr/local/bin/typeproxy
+# Set environment variables TYPEPROXY_URL, TYPEPROXY_PORT and
+# TYPEPROXY_GRACE using `systemctl edit typeproxy` and then
+# creating a Service section like:
+# [Service]
+# Environment="TYPEPROXY_URL=bar"
+# Environment="TYPEPROXY_PORT=woo"
+# Environment="TYPEPROXY_GRACE=woo"
+
+[Install]
+WantedBy=multi-user.target
