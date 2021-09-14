@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -53,7 +57,26 @@ func newProxy(target *url.URL, timeout, keepalive time.Duration) *httputil.Rever
 		if r.Method == http.MethodPost {
 			ct := strings.Join(r.Header.Values("Content-Type"), ", ")
 			log.Println(r.Proto, r.Method, "Content-Type:", ct, r.URL.String())
-			r.Header.Set("Content-Type", "application/json")
+			if r.Body != nil {
+				// Read the whole body
+				data, err := io.ReadAll(r.Body)
+				if !errors.Is(err, io.EOF) {
+					return
+				}
+				r.Body.Close()
+				// If we can decode it as json, add a "contentType" field
+				var content map[string]interface{}
+				dec := json.NewDecoder(bytes.NewReader(data))
+				if err := dec.Decode(&content); err == nil {
+					r.Header.Set("Content-Type", "application/json")
+					content["contentType"] = ct
+					if data, err = json.Marshal(content); err != nil {
+						r.Header.Del("Content-Length") // just in case
+					}
+				}
+				// Replace the body with whatever we could do
+				r.Body = ioutil.NopCloser(bytes.NewReader(data))
+			}
 		} else {
 			log.Println(r.Proto, r.Method, r.URL.String())
 		}
