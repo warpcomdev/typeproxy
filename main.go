@@ -52,34 +52,46 @@ func newProxy(target *url.URL, timeout, keepalive time.Duration) *httputil.Rever
 		ExpectContinueTimeout: time.Second,
 	}
 	p.Director = func(r *http.Request) {
-		oldDirector(r)
 		// Change POST body content-type to application/json
-		if r.Method == http.MethodPost {
-			ct := strings.Join(r.Header.Values("Content-Type"), ", ")
-			log.Println(r.Proto, r.Method, "Content-Type:", ct, r.URL.String())
-			if r.Body != nil {
-				// Read the whole body
-				data, err := io.ReadAll(r.Body)
-				if !errors.Is(err, io.EOF) {
-					return
-				}
-				r.Body.Close()
-				// If we can decode it as json, add a "contentType" field
-				var content map[string]interface{}
-				dec := json.NewDecoder(bytes.NewReader(data))
-				if err := dec.Decode(&content); err == nil {
-					r.Header.Set("Content-Type", "application/json")
-					content["contentType"] = ct
-					if data, err = json.Marshal(content); err != nil {
-						r.ContentLength = int64(len(data))
-					}
-				}
-				// Replace the body with whatever we could do
-				r.Body = ioutil.NopCloser(bytes.NewReader(data))
-			}
-		} else {
+		oldDirector(r)
+		if r.Method != http.MethodPost {
 			log.Println(r.Proto, r.Method, r.URL.String())
+			return
 		}
+		ct := strings.Join(r.Header.Values("Content-Type"), ", ")
+		log.Println(r.Proto, r.Method, "Content-Type:", ct, r.URL.String())
+		if r.Body == nil {
+			return
+		}
+		// Read the whole body and clear any body trace in the request
+		data, err := io.ReadAll(r.Body)
+		r.Body.Close()
+		r.Body = nil
+		r.Header.Del("Content-Length")
+		if err != nil && !errors.Is(err, io.EOF) {
+			log.Println("Failed to read body:", err)
+			r.ContentLength = 0
+			return
+		}
+		// Try to decode as json
+		var content map[string]interface{}
+		dec := json.NewDecoder(bytes.NewReader(data))
+		if err := dec.Decode(&content); err != nil {
+			log.Println("Failed to decode body as json:", err)
+			r.Body = ioutil.NopCloser(bytes.NewReader(data))
+			return
+		}
+		r.Header.Set("Content-Type", "application/json")
+		content["contentType"] = ct
+		newData, err := json.Marshal(content)
+		if err != nil {
+			log.Println("Failed to encode new body as json:", err)
+			r.Body = ioutil.NopCloser(bytes.NewReader(data))
+			return
+		}
+		// Replace the body with whatever we could do
+		r.Body = ioutil.NopCloser(bytes.NewReader(newData))
+		r.ContentLength = int64(len(newData))
 	}
 	return p
 }
