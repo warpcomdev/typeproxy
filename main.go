@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -48,10 +49,13 @@ func newProxy(target *url.URL, timeout, keepalive time.Duration) *httputil.Rever
 	}
 	p.Director = func(r *http.Request) {
 		oldDirector(r)
-		log.Println(r.Proto, r.Method, r.URL.String())
 		// Change POST body content-type to application/json
 		if r.Method == http.MethodPost {
+			ct := strings.Join(r.Header.Values("Content-Type"), ", ")
+			log.Println(r.Proto, r.Method, "Content-Type:", ct, r.URL.String())
 			r.Header.Set("Content-Type", "application/json")
+		} else {
+			log.Println(r.Proto, r.Method, r.URL.String())
 		}
 	}
 	return p
