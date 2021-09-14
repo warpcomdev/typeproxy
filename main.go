@@ -71,7 +71,7 @@ func newProxy(target *url.URL, timeout, keepalive time.Duration) *httputil.Rever
 					r.Header.Set("Content-Type", "application/json")
 					content["contentType"] = ct
 					if data, err = json.Marshal(content); err != nil {
-						r.Header.Del("Content-Length") // just in case
+						r.ContentLength = int64(len(data))
 					}
 				}
 				// Replace the body with whatever we could do
